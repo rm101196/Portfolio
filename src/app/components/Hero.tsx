@@ -29,7 +29,7 @@ export function Hero({ isEditing }: HeroProps) {
   };
 
   return (
-    <section className="min-h-screen flex items-center justify-center px-6 py-20">
+    <section id="hero" className="min-h-screen flex items-center justify-center px-6 py-20">
       <div className="max-w-4xl w-full">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

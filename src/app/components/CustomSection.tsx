@@ -628,12 +628,18 @@ function CtaTemplate({ sectionId, isEditing }: { sectionId: string; isEditing: b
 // ── main export ───────────────────────────────────────────────────────────────
 
 export function CustomSection({ sectionId, template, label, isEditing }: CustomSectionProps) {
-  switch (template) {
-    case "text":       return <TextTemplate sectionId={sectionId} isEditing={isEditing} />;
-    case "highlights": return <HighlightsTemplate sectionId={sectionId} isEditing={isEditing} />;
-    case "timeline":   return <TimelineTemplate sectionId={sectionId} isEditing={isEditing} />;
-    case "quote":      return <QuoteTemplate sectionId={sectionId} isEditing={isEditing} />;
-    case "cta":        return <CtaTemplate sectionId={sectionId} isEditing={isEditing} />;
-    default:           return null;
-  }
+  return (
+    <div id={sectionId}>
+      {(() => {
+        switch (template) {
+          case "text":       return <TextTemplate sectionId={sectionId} isEditing={isEditing} />;
+          case "highlights": return <HighlightsTemplate sectionId={sectionId} isEditing={isEditing} />;
+          case "timeline":   return <TimelineTemplate sectionId={sectionId} isEditing={isEditing} />;
+          case "quote":      return <QuoteTemplate sectionId={sectionId} isEditing={isEditing} />;
+          case "cta":        return <CtaTemplate sectionId={sectionId} isEditing={isEditing} />;
+          default:           return null;
+        }
+      })()}
+    </div>
+  );
 }

@@ -166,7 +166,7 @@ export function Skills({ isEditing }: SkillsProps) {
   };
 
   return (
-    <section className="py-20 px-6 bg-neutral-50 dark:bg-neutral-900/50">
+    <section id="skills" className="py-20 px-6 bg-neutral-50 dark:bg-neutral-900/50">
       <div className="max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

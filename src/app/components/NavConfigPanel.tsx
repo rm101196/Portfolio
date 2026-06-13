@@ -2,33 +2,42 @@ import { useState } from "react";
 import { X, Plus, Trash2, GripVertical, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence, Reorder, useDragControls } from "motion/react";
 import type { NavItem } from "../hooks/useNavConfig";
+import type { SectionDef } from "../hooks/useSectionOrder";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   items: NavItem[];
+  /** Current sections in the portfolio (used to build the scroll-target dropdown) */
+  sections: SectionDef[];
   onSave: (items: NavItem[]) => void;
   onAdd: () => void;
   onRemove: (id: string) => void;
   onUpdate: (id: string, patch: Partial<NavItem>) => void;
 }
 
-// All section IDs available for scrolling to
-const SECTION_TARGETS = [
-  { value: "",         label: "Top of page (Home)" },
-  { value: "projects", label: "Projects section" },
-  { value: "contact",  label: "Contact section" },
-  { value: "about",    label: "About section" },
-  { value: "skills",   label: "Skills section" },
-  { value: "stats",    label: "Stats section" },
-];
+/**
+ * Build section target options dynamically from the active sections list.
+ * Always includes "Top of page" as the first option.
+ */
+function buildSectionTargets(sections: SectionDef[]) {
+  return [
+    { value: "", label: "Top of page (Home)" },
+    ...sections.map((s) => ({
+      value: s.id,
+      label: `${s.label} section`,
+    })),
+  ];
+}
 
 function DraggableNavRow({
   item,
+  sectionTargets,
   onRemove,
   onUpdate,
 }: {
   item: NavItem;
+  sectionTargets: { value: string; label: string }[];
   onRemove: () => void;
   onUpdate: (patch: Partial<NavItem>) => void;
 }) {
@@ -87,7 +96,7 @@ function DraggableNavRow({
           onChange={(e) => onUpdate({ targetId: e.target.value })}
           className="w-full px-2 py-1.5 text-xs border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 focus:outline-none focus:border-blue-500 ml-6"
         >
-          {SECTION_TARGETS.map((t) => (
+          {sectionTargets.map((t) => (
             <option key={t.value} value={t.value}>{t.label}</option>
           ))}
           <option value="__custom__">Custom section ID…</option>
@@ -97,7 +106,9 @@ function DraggableNavRow({
   );
 }
 
-export function NavConfigPanel({ isOpen, onClose, items, onSave, onAdd, onRemove, onUpdate }: Props) {
+export function NavConfigPanel({ isOpen, onClose, items, sections, onSave, onAdd, onRemove, onUpdate }: Props) {
+  const sectionTargets = buildSectionTargets(sections);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -132,6 +143,7 @@ export function NavConfigPanel({ isOpen, onClose, items, onSave, onAdd, onRemove
                   <DraggableNavRow
                     key={item.id}
                     item={item}
+                    sectionTargets={sectionTargets}
                     onRemove={() => onRemove(item.id)}
                     onUpdate={(patch) => onUpdate(item.id, patch)}
                   />

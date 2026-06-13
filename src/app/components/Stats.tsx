@@ -49,7 +49,7 @@ export function Stats({ isEditing }: StatsProps) {
   };
 
   return (
-    <section className="py-16 px-6 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20">
+    <section id="stats" className="py-16 px-6 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {stats.map((stat, index) => {

@@ -6,6 +6,7 @@ import { NavConfigPanel } from "./NavConfigPanel";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { useProfilePhoto } from "../hooks/useProfilePhoto";
 import { useNavConfig } from "../hooks/useNavConfig";
+import { useSectionOrder } from "../hooks/useSectionOrder";
 import defaultPhoto from "../../imports/image.png";
 
 interface HeaderProps {
@@ -25,6 +26,7 @@ export function Header({ isEditing, isAuthenticated, onToggleEdit, onLogin, onLo
 
   const { customPhoto, upload, remove } = useProfilePhoto();
   const { items: navItems, save: saveNav, addItem: addNavItem, removeItem: removeNavItem, updateItem: updateNavItem } = useNavConfig();
+  const { sections } = useSectionOrder();
 
   const photoSrc = customPhoto || defaultPhoto;
 
@@ -197,6 +199,7 @@ export function Header({ isEditing, isAuthenticated, onToggleEdit, onLogin, onLo
         isOpen={navPanelOpen}
         onClose={() => setNavPanelOpen(false)}
         items={navItems}
+        sections={sections}
         onSave={saveNav}
         onAdd={addNavItem}
         onRemove={removeNavItem}
