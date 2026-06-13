@@ -1,4 +1,178 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, ChevronDown, Palette } from "lucide-react";
+
+// ── Per-field style overrides stored in localStorage ──────────────────────────
+
+interface FieldStyle {
+  bold?: boolean;
+  italic?: boolean;
+  align?: "left" | "center" | "right";
+  color?: string;    // hex or ""
+  fontSize?: string; // e.g. "text-sm", "text-base", "text-lg", "text-xl"
+}
+
+const FONT_SIZE_OPTIONS = [
+  { label: "XS", value: "text-xs" },
+  { label: "SM", value: "text-sm" },
+  { label: "Base", value: "text-base" },
+  { label: "LG", value: "text-lg" },
+  { label: "XL", value: "text-xl" },
+  { label: "2XL", value: "text-2xl" },
+  { label: "3XL", value: "text-3xl" },
+];
+
+function useFieldStyle(field: string): [FieldStyle, (patch: Partial<FieldStyle>) => void] {
+  const key = `portfolio_style_${field}`;
+  const [style, setStyle] = useState<FieldStyle>(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const update = (patch: Partial<FieldStyle>) => {
+    const next = { ...style, ...patch };
+    setStyle(next);
+    localStorage.setItem(key, JSON.stringify(next));
+  };
+
+  return [style, update];
+}
+
+// ── Inline style toolbar ──────────────────────────────────────────────────────
+
+function InlineStyleToolbar({
+  style,
+  onUpdate,
+}: {
+  style: FieldStyle;
+  onUpdate: (patch: Partial<FieldStyle>) => void;
+}) {
+  const [showSizeMenu, setShowSizeMenu] = useState(false);
+  const colorRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex items-center gap-0.5 flex-wrap mb-1">
+      {/* Bold */}
+      <button
+        onClick={() => onUpdate({ bold: !style.bold })}
+        className={`p-1.5 rounded transition-colors ${
+          style.bold ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+        }`}
+        title="Bold"
+      >
+        <Bold className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Italic */}
+      <button
+        onClick={() => onUpdate({ italic: !style.italic })}
+        className={`p-1.5 rounded transition-colors ${
+          style.italic ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+        }`}
+        title="Italic"
+      >
+        <Italic className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Divider */}
+      <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-600 mx-1" />
+
+      {/* Alignment */}
+      {(["left", "center", "right"] as const).map((align) => {
+        const Icon = align === "left" ? AlignLeft : align === "center" ? AlignCenter : AlignRight;
+        return (
+          <button
+            key={align}
+            onClick={() => onUpdate({ align })}
+            className={`p-1.5 rounded transition-colors ${
+              style.align === align ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+            }`}
+            title={`Align ${align}`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+          </button>
+        );
+      })}
+
+      {/* Divider */}
+      <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-600 mx-1" />
+
+      {/* Color picker */}
+      <button
+        onClick={() => colorRef.current?.click()}
+        className="relative p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
+        title="Text color"
+      >
+        <Palette className="w-3.5 h-3.5" />
+        {style.color && (
+          <div className="absolute bottom-0 left-1 right-1 h-1 rounded-full" style={{ backgroundColor: style.color }} />
+        )}
+      </button>
+      <input
+        ref={colorRef}
+        type="color"
+        value={style.color || "#000000"}
+        onChange={(e) => onUpdate({ color: e.target.value })}
+        className="hidden"
+      />
+      {style.color && (
+        <button
+          onClick={() => onUpdate({ color: "" })}
+          className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 px-1"
+          title="Reset color"
+        >
+          ×
+        </button>
+      )}
+
+      {/* Divider */}
+      <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-600 mx-1" />
+
+      {/* Font size dropdown */}
+      <div className="relative">
+        <button
+          onClick={() => setShowSizeMenu(!showSizeMenu)}
+          className="flex items-center gap-0.5 px-2 py-1 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors text-xs font-medium"
+          title="Font size"
+        >
+          {FONT_SIZE_OPTIONS.find((o) => o.value === style.fontSize)?.label || "Size"}
+          <ChevronDown className="w-3 h-3" />
+        </button>
+        {showSizeMenu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowSizeMenu(false)} />
+            <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg overflow-hidden min-w-[80px]">
+              {FONT_SIZE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => { onUpdate({ fontSize: opt.value }); setShowSizeMenu(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors ${
+                    style.fontSize === opt.value ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-semibold" : ""
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              {style.fontSize && (
+                <button
+                  onClick={() => { onUpdate({ fontSize: "" }); setShowSizeMenu(false); }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 border-t border-neutral-100 dark:border-neutral-700"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main EditableContent component ────────────────────────────────────────────
 
 interface EditableContentProps {
   field: string;
@@ -18,6 +192,7 @@ export function EditableContent({
   as = "p",
 }: EditableContentProps) {
   const [value, setValue] = useState(defaultValue);
+  const [fieldStyle, updateFieldStyle] = useFieldStyle(field);
 
   useEffect(() => {
     const stored = localStorage.getItem(`portfolio_${field}`);
@@ -32,28 +207,46 @@ export function EditableContent({
     }
   }, [value, field, defaultValue]);
 
+  /** Build inline style object from per-field overrides */
+  const inlineStyle: React.CSSProperties = {};
+  if (fieldStyle.bold) inlineStyle.fontWeight = "bold";
+  if (fieldStyle.italic) inlineStyle.fontStyle = "italic";
+  if (fieldStyle.align) inlineStyle.textAlign = fieldStyle.align;
+  if (fieldStyle.color) inlineStyle.color = fieldStyle.color;
+
+  /** Build dynamic class for font size override */
+  const sizeClass = fieldStyle.fontSize || "";
+
   if (!isEditing) {
     const Tag = as;
-    return <Tag className={className}>{value}</Tag>;
-  }
-
-  if (multiline) {
     return (
-      <textarea
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className={`${className} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800 resize-none`}
-        rows={3}
-      />
+      <Tag className={`${className} ${sizeClass}`} style={inlineStyle}>
+        {value}
+      </Tag>
     );
   }
 
+  // Edit mode: show inline toolbar + input/textarea
   return (
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      className={`${className} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800`}
-    />
+    <div className="w-full">
+      <InlineStyleToolbar style={fieldStyle} onUpdate={updateFieldStyle} />
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          style={inlineStyle}
+          className={`${className} ${sizeClass} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800 resize-none`}
+          rows={3}
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          style={inlineStyle}
+          className={`${className} ${sizeClass} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800`}
+        />
+      )}
+    </div>
   );
 }
