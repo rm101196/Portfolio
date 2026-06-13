@@ -134,13 +134,13 @@ function SectionWrapper({
   // In edit mode wrap in Reorder.Item for drag support
   if (isEditing) {
     return (
-      <Reorder.Item value={section} as="div" dragListener={false} dragControls={controls}>
+      <Reorder.Item value={section} as="div" id={section.id} dragListener={false} dragControls={controls}>
         {inner}
       </Reorder.Item>
     );
   }
 
-  return <div>{inner}</div>;
+  return <div id={section.id}>{inner}</div>;
 }
 
 // ── app ───────────────────────────────────────────────────────────────────────
