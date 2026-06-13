@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { Plus, Trash2, ExternalLink } from "lucide-react";
-import { motion } from "motion/react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, Trash2, ExternalLink, Paperclip, Eye, FileText, X } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import type { CustomTemplate } from "../hooks/useSectionOrder";
 
 interface CustomSectionProps {
@@ -36,10 +36,23 @@ interface TimelineData {
   entries: TimelineEntry[];
 }
 
-interface QuoteData {
+interface QuoteEntry {
+  id: string;
   quote: string;
   author: string;
   role: string;
+  /** Per-entry file attachment stored as base64 data URL */
+  attachment?: {
+    filename: string;
+    mimeType: string;
+    dataUrl: string;
+    type: "image" | "pdf";
+  } | null;
+}
+
+interface QuoteData {
+  title: string;
+  entries: QuoteEntry[];
 }
 
 interface CtaData {
@@ -55,7 +68,7 @@ const DEFAULTS: Record<CustomTemplate, SectionData> = {
   text: { title: "Section Title", paragraphs: ["Write your content here."] } as TextData,
   highlights: { title: "Key Highlights", subtitle: "What sets me apart", items: ["First highlight", "Second highlight", "Third highlight"] } as HighlightsData,
   timeline: { title: "Experience", entries: [{ id: "e1", period: "2022 – Present", role: "Senior Product Manager", company: "Company Name", description: "Describe your responsibilities and achievements here." }] } as TimelineData,
-  quote: { quote: "Write your testimonial or featured quote here.", author: "Author Name", role: "Title, Company" } as QuoteData,
+  quote: { title: "Testimonials for Leaders and peers", entries: [{ id: "q1", quote: "Write your testimonial or featured quote here.", author: "Author Name", role: "Title, Company", attachment: null }] } as QuoteData,
   cta: { headline: "Let's Work Together", description: "Open to new opportunities and collaborations.", buttonText: "Get In Touch", buttonUrl: "mailto:rishabh.mishra.ba@gmail.com" } as CtaData,
 };
 
@@ -288,32 +301,286 @@ function TimelineTemplate({ sectionId, isEditing }: { sectionId: string; isEditi
   );
 }
 
-// ── template: Quote ────────────────────────────────────────────────────────────
+// ── template: Quote (multi-entry with per-item attachments) ────────────────────
 
 function QuoteTemplate({ sectionId, isEditing }: { sectionId: string; isEditing: boolean }) {
   const [data, save] = useCustomData<QuoteData>(sectionId, "quote");
+  const [previewItem, setPreviewItem] = useState<QuoteEntry["attachment"] | null>(null);
+
+  // Migrate legacy single-quote data to multi-entry format
+  useEffect(() => {
+    const raw = data as any;
+    if (raw.quote && !raw.entries) {
+      const migrated: QuoteData = {
+        title: "Testimonials",
+        entries: [{ id: "q_migrated", quote: raw.quote, author: raw.author || "", role: raw.role || "", attachment: null }],
+      };
+      save(migrated);
+    }
+  }, []);
+
+  const addEntry = () =>
+    save({
+      ...data,
+      entries: [...data.entries, { id: `q_${Date.now()}`, quote: "", author: "", role: "", attachment: null }],
+    });
+
+  const removeEntry = (id: string) =>
+    save({ ...data, entries: data.entries.filter((e) => e.id !== id) });
+
+  const updateEntry = (id: string, patch: Partial<QuoteEntry>) =>
+    save({ ...data, entries: data.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
+
+  /** Handle file upload for a specific testimonial entry */
+  const handleFileUpload = (entryId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const attachment: QuoteEntry["attachment"] = {
+        filename: file.name,
+        mimeType: file.type,
+        dataUrl: reader.result as string,
+        type: file.type === "application/pdf" ? "pdf" : "image",
+      };
+      updateEntry(entryId, { attachment });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeAttachment = (entryId: string) => updateEntry(entryId, { attachment: null });
 
   return (
     <section className="py-20 px-6 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20">
-      <div className="max-w-3xl mx-auto text-center">
-        <div className="text-7xl text-blue-600/30 dark:text-blue-400/30 font-serif leading-none mb-6">"</div>
-        {isEditing ? (
-          <>
-            <EditTextarea value={data.quote} onChange={(v) => save({ ...data, quote: v })} placeholder="Write your quote or testimonial…" rows={4} className="text-2xl text-center font-medium italic mb-8" />
-            <EditInput value={data.author} onChange={(v) => save({ ...data, author: v })} placeholder="Author name" className="font-bold text-lg text-center" />
-            <EditInput value={data.role} onChange={(v) => save({ ...data, role: v })} placeholder="Role, Company" className="text-neutral-500 text-center mt-2" />
-          </>
-        ) : (
-          <>
-            <blockquote className="text-2xl md:text-3xl font-medium italic text-neutral-800 dark:text-neutral-200 mb-8">
-              {data.quote}
-            </blockquote>
-            <p className="font-bold text-lg">{data.author}</p>
-            <p className="text-neutral-500 dark:text-neutral-400 text-sm mt-1">{data.role}</p>
-          </>
+      <div className="max-w-4xl mx-auto">
+        {/* Section title */}
+        <div className="text-center mb-12">
+          <div className="text-7xl text-blue-600/30 dark:text-blue-400/30 font-serif leading-none mb-4">"</div>
+          {isEditing ? (
+            <EditInput
+              value={data.title || ""}
+              onChange={(v) => save({ ...data, title: v })}
+              placeholder="Section title (e.g. Testimonials)"
+              className="text-3xl font-bold text-center"
+            />
+          ) : (
+            <h2 className="text-3xl md:text-4xl font-bold">{data.title}</h2>
+          )}
+        </div>
+
+        {/* Testimonial entries */}
+        <div className="space-y-8">
+          {data.entries.map((entry, i) => (
+            <QuoteEntryCard
+              key={entry.id}
+              entry={entry}
+              index={i}
+              isEditing={isEditing}
+              onUpdate={(patch) => updateEntry(entry.id, patch)}
+              onRemove={() => removeEntry(entry.id)}
+              onFileUpload={(file) => handleFileUpload(entry.id, file)}
+              onRemoveAttachment={() => removeAttachment(entry.id)}
+              onPreviewAttachment={() => setPreviewItem(entry.attachment)}
+            />
+          ))}
+        </div>
+
+        {/* Add new testimonial — edit mode only */}
+        {isEditing && (
+          <button
+            onClick={addEntry}
+            className="mt-8 w-full py-3 border-2 border-dashed border-blue-400 dark:border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 rounded-xl flex items-center justify-center gap-2 transition-colors"
+          >
+            <Plus className="w-5 h-5" /> Add Testimonial
+          </button>
         )}
       </div>
+
+      {/* Full-screen attachment preview modal */}
+      <AttachmentPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
     </section>
+  );
+}
+
+/** Individual testimonial card with inline file attachment support */
+function QuoteEntryCard({
+  entry,
+  index,
+  isEditing,
+  onUpdate,
+  onRemove,
+  onFileUpload,
+  onRemoveAttachment,
+  onPreviewAttachment,
+}: {
+  entry: QuoteEntry;
+  index: number;
+  isEditing: boolean;
+  onUpdate: (patch: Partial<QuoteEntry>) => void;
+  onRemove: () => void;
+  onFileUpload: (file: File) => void;
+  onRemoveAttachment: () => void;
+  onPreviewAttachment: () => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    onFileUpload(file);
+    e.target.value = "";
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.1 }}
+      viewport={{ once: true }}
+      className="relative bg-white dark:bg-neutral-800 rounded-2xl p-8 shadow-lg"
+    >
+      {/* Remove button — edit mode */}
+      {isEditing && (
+        <button
+          onClick={onRemove}
+          className="absolute top-3 right-3 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+          aria-label="Remove testimonial"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Quote content */}
+      {isEditing ? (
+        <div className="space-y-3">
+          <EditTextarea
+            value={entry.quote}
+            onChange={(v) => onUpdate({ quote: v })}
+            placeholder="Write the testimonial or quote…"
+            rows={3}
+            className="text-xl italic"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <EditInput value={entry.author} onChange={(v) => onUpdate({ author: v })} placeholder="Author name" className="font-bold" />
+            <EditInput value={entry.role} onChange={(v) => onUpdate({ role: v })} placeholder="Role, Company" className="text-neutral-500" />
+          </div>
+        </div>
+      ) : (
+        <>
+          <blockquote className="text-xl md:text-2xl italic text-neutral-800 dark:text-neutral-200 mb-6 leading-relaxed">
+            "{entry.quote}"
+          </blockquote>
+          <div>
+            <p className="font-bold text-lg">{entry.author}</p>
+            <p className="text-neutral-500 dark:text-neutral-400 text-sm">{entry.role}</p>
+          </div>
+        </>
+      )}
+
+      {/* Per-entry file attachment area */}
+      <div className="mt-5 pt-4 border-t border-neutral-100 dark:border-neutral-700">
+        {entry.attachment ? (
+          /* Attachment thumbnail with preview/remove */
+          <div className="flex items-center gap-4">
+            <div
+              className="relative group w-24 h-16 rounded-lg overflow-hidden bg-neutral-100 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 cursor-pointer flex items-center justify-center"
+              onClick={onPreviewAttachment}
+            >
+              {entry.attachment.type === "image" ? (
+                <img src={entry.attachment.dataUrl} alt={entry.attachment.filename} className="w-full h-full object-cover" />
+              ) : (
+                <FileText className="w-6 h-6 text-red-500" />
+              )}
+              {/* Hover overlay */}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                <Eye className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-neutral-700 dark:text-neutral-300 truncate">{entry.attachment.filename}</p>
+              <p className="text-xs text-neutral-400">{entry.attachment.type === "pdf" ? "PDF Document" : "Image"}</p>
+            </div>
+            {isEditing && (
+              <button
+                onClick={onRemoveAttachment}
+                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                aria-label="Remove attachment"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        ) : isEditing ? (
+          /* Upload button — shown only in edit mode when no attachment exists */
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+          >
+            <Paperclip className="w-4 h-4" />
+            Attach file (image or PDF)
+          </button>
+        ) : null}
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      </div>
+    </motion.div>
+  );
+}
+
+/** Lightweight modal for previewing per-entry attachments */
+function AttachmentPreviewModal({
+  item,
+  onClose,
+}: {
+  item: QuoteEntry["attachment"] | null;
+  onClose: () => void;
+}) {
+  if (!item) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="relative max-w-4xl w-full max-h-[90vh] bg-white dark:bg-neutral-900 rounded-2xl overflow-hidden shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 z-10 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors"
+            aria-label="Close preview"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {/* Content */}
+          {item.type === "image" ? (
+            <img src={item.dataUrl} alt={item.filename} className="w-full h-full max-h-[85vh] object-contain" />
+          ) : (
+            <iframe src={item.dataUrl} title={item.filename} className="w-full h-[85vh]" />
+          )}
+
+          {/* Filename footer */}
+          <div className="absolute bottom-0 left-0 right-0 px-4 py-2 bg-black/60 text-white text-sm text-center">
+            {item.filename}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
