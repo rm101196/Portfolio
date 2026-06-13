@@ -1,5 +1,6 @@
-import { motion } from "motion/react";
-import { Brain, Activity, MessageSquare, Cloud, TrendingUp, Users, Zap, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Brain, Activity, MessageSquare, Cloud, TrendingUp, Users, Zap, Plus, Trash2, X } from "lucide-react";
 import { useEditableList } from "../hooks/useEditableList";
 
 interface ProjectsProps {
@@ -137,6 +138,8 @@ export function Projects({ isEditing }: ProjectsProps) {
     "all_projects",
     DEFAULT_PROJECTS
   );
+  /** ID of the project whose detail popup is open (view mode only) */
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
   const handleAdd = () => {
     addItem({
@@ -150,6 +153,8 @@ export function Projects({ isEditing }: ProjectsProps) {
       impact: "",
     });
   };
+
+  const activeProject = projects.find((p) => p.id === activeProjectId) || null;
 
   return (
     <section id="projects" className="py-20 px-6">
@@ -167,7 +172,7 @@ export function Projects({ isEditing }: ProjectsProps) {
           </p>
         </motion.div>
 
-        {/* Summary cards */}
+        {/* Project cards grid — clickable in view mode to open detail popup */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-16">
           {projects.map((project, index) => {
             const Icon = ProjectIcons[index % ProjectIcons.length];
@@ -179,7 +184,10 @@ export function Projects({ isEditing }: ProjectsProps) {
                 whileInView={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.07, duration: 0.5 }}
                 viewport={{ once: true }}
-                className="p-5 bg-white dark:bg-neutral-800 rounded-xl shadow-lg hover:shadow-xl transition-shadow"
+                onClick={!isEditing ? () => setActiveProjectId(project.id) : undefined}
+                className={`p-5 bg-white dark:bg-neutral-800 rounded-xl shadow-lg hover:shadow-xl transition-all ${
+                  !isEditing ? "cursor-pointer hover:scale-[1.03]" : ""
+                }`}
               >
                 <div className={`w-11 h-11 ${accent} rounded-lg flex items-center justify-center mb-3`}>
                   <Icon className="w-5 h-5" />
@@ -192,23 +200,23 @@ export function Projects({ isEditing }: ProjectsProps) {
           })}
         </div>
 
-        {/* Full project cards */}
-        {projects.map((project, index) => {
-          const color = project.color || COLORS[index % COLORS.length];
-          const gradient = gradientMap[color] || gradientMap.blue;
-          const iconBg = iconBgMap[color] || iconBgMap.blue;
-          const Icon = ProjectIcons[index % ProjectIcons.length];
+        {/* Full project detail cards — only shown inline in EDIT mode */}
+        {isEditing &&
+          projects.map((project, index) => {
+            const color = project.color || COLORS[index % COLORS.length];
+            const gradient = gradientMap[color] || gradientMap.blue;
+            const iconBg = iconBgMap[color] || iconBgMap.blue;
+            const Icon = ProjectIcons[index % ProjectIcons.length];
 
-          return (
-            <motion.div
-              key={project.id}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              viewport={{ once: true }}
-              className={`mb-10 p-8 bg-gradient-to-br ${gradient} rounded-2xl relative`}
-            >
-              {isEditing && (
+            return (
+              <motion.div
+                key={project.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                viewport={{ once: true }}
+                className={`mb-10 p-8 bg-gradient-to-br ${gradient} rounded-2xl relative`}
+              >
                 <button
                   onClick={() => removeItem(project.id)}
                   className="absolute top-4 right-4 p-2 bg-red-100 dark:bg-red-900/30 text-red-600 hover:bg-red-200 dark:hover:bg-red-800/50 rounded-lg transition-colors"
@@ -216,13 +224,11 @@ export function Projects({ isEditing }: ProjectsProps) {
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
-              )}
 
-              <div className="flex items-center gap-3 mb-6">
-                <div className={`w-12 h-12 ${iconBg} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                  <Icon className="w-6 h-6 text-white" />
-                </div>
-                {isEditing ? (
+                <div className="flex items-center gap-3 mb-6">
+                  <div className={`w-12 h-12 ${iconBg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                    <Icon className="w-6 h-6 text-white" />
+                  </div>
                   <input
                     type="text"
                     value={project.title}
@@ -230,12 +236,8 @@ export function Projects({ isEditing }: ProjectsProps) {
                     placeholder="Project Title"
                     className="text-xl md:text-2xl font-bold w-full px-3 py-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none"
                   />
-                ) : (
-                  <h3 className="text-2xl md:text-3xl font-bold">{project.title || "Untitled Project"}</h3>
-                )}
-              </div>
+                </div>
 
-              {isEditing ? (
                 <div className="grid md:grid-cols-2 gap-6">
                   <InlineField label="🚨 Problem" value={project.problem} onChange={(v) => updateItem(project.id, { problem: v })} multiline />
                   <InlineField label="🎯 My Role" value={project.role} onChange={(v) => updateItem(project.id, { role: v })} multiline />
@@ -245,43 +247,9 @@ export function Projects({ isEditing }: ProjectsProps) {
                     <InlineField label="📈 Impact" value={project.impact} onChange={(v) => updateItem(project.id, { impact: v })} multiline />
                   </div>
                 </div>
-              ) : (
-                <div className="grid md:grid-cols-2 gap-8">
-                  {project.problem && (
-                    <div>
-                      <h4 className="text-xl font-bold mb-3 text-red-600 dark:text-red-400">🚨 Problem</h4>
-                      <p className="text-neutral-700 dark:text-neutral-300">{project.problem}</p>
-                    </div>
-                  )}
-                  {project.role && (
-                    <div>
-                      <h4 className="text-xl font-bold mb-3 text-blue-600 dark:text-blue-400">🎯 My Role</h4>
-                      <p className="text-neutral-700 dark:text-neutral-300">{project.role}</p>
-                    </div>
-                  )}
-                  {project.solution && (
-                    <div>
-                      <h4 className="text-xl font-bold mb-3 text-purple-600 dark:text-purple-400">⚙️ Solution</h4>
-                      <p className="text-neutral-700 dark:text-neutral-300">{project.solution}</p>
-                    </div>
-                  )}
-                  {project.execution && (
-                    <div>
-                      <h4 className="text-xl font-bold mb-3 text-orange-600 dark:text-orange-400">🧪 Execution</h4>
-                      <p className="text-neutral-700 dark:text-neutral-300">{project.execution}</p>
-                    </div>
-                  )}
-                  {project.impact && (
-                    <div className="md:col-span-2">
-                      <h4 className="text-xl font-bold mb-3 text-green-600 dark:text-green-400">📈 Impact</h4>
-                      <p className="text-neutral-700 dark:text-neutral-300 font-semibold">{project.impact}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </motion.div>
-          );
-        })}
+              </motion.div>
+            );
+          })}
 
         {isEditing && (
           <motion.button
@@ -295,6 +263,103 @@ export function Projects({ isEditing }: ProjectsProps) {
           </motion.button>
         )}
       </div>
+
+      {/* Project detail popup modal — view mode only */}
+      <AnimatePresence>
+        {activeProject && !isEditing && (
+          <ProjectDetailModal
+            project={activeProject}
+            index={projects.indexOf(activeProject)}
+            onClose={() => setActiveProjectId(null)}
+          />
+        )}
+      </AnimatePresence>
     </section>
+  );
+}
+
+/** Full-screen modal showing project details when a card is clicked in view mode */
+function ProjectDetailModal({
+  project,
+  index,
+  onClose,
+}: {
+  project: Project;
+  index: number;
+  onClose: () => void;
+}) {
+  const color = project.color || COLORS[index % COLORS.length];
+  const gradient = gradientMap[color] || gradientMap.blue;
+  const iconBg = iconBgMap[color] || iconBgMap.blue;
+  const Icon = ProjectIcons[index % ProjectIcons.length];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.92, opacity: 0, y: 20 }}
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        className={`relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-gradient-to-br ${gradient} rounded-2xl shadow-2xl p-8`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full transition-colors z-10"
+          aria-label="Close project details"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-8">
+          <div className={`w-12 h-12 ${iconBg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+            <Icon className="w-6 h-6 text-white" />
+          </div>
+          <h3 className="text-2xl md:text-3xl font-bold">{project.title}</h3>
+        </div>
+
+        {/* Details grid */}
+        <div className="grid md:grid-cols-2 gap-8">
+          {project.problem && (
+            <div>
+              <h4 className="text-xl font-bold mb-3 text-red-600 dark:text-red-400">🚨 Problem</h4>
+              <p className="text-neutral-700 dark:text-neutral-300">{project.problem}</p>
+            </div>
+          )}
+          {project.role && (
+            <div>
+              <h4 className="text-xl font-bold mb-3 text-blue-600 dark:text-blue-400">🎯 My Role</h4>
+              <p className="text-neutral-700 dark:text-neutral-300">{project.role}</p>
+            </div>
+          )}
+          {project.solution && (
+            <div>
+              <h4 className="text-xl font-bold mb-3 text-purple-600 dark:text-purple-400">⚙️ Solution</h4>
+              <p className="text-neutral-700 dark:text-neutral-300">{project.solution}</p>
+            </div>
+          )}
+          {project.execution && (
+            <div>
+              <h4 className="text-xl font-bold mb-3 text-orange-600 dark:text-orange-400">🧪 Execution</h4>
+              <p className="text-neutral-700 dark:text-neutral-300">{project.execution}</p>
+            </div>
+          )}
+          {project.impact && (
+            <div className="md:col-span-2">
+              <h4 className="text-xl font-bold mb-3 text-green-600 dark:text-green-400">📈 Impact</h4>
+              <p className="text-neutral-700 dark:text-neutral-300 font-semibold">{project.impact}</p>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
