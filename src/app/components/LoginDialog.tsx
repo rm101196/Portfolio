@@ -7,21 +7,43 @@ interface LoginDialogProps {
   onLogin: (email: string, password: string) => void;
 }
 
+/**
+ * SHA-256 hash of the edit-mode password.
+ * To change the password: hash your new password with SHA-256 and replace this value.
+ * Generate with: echo -n "yourpassword" | shasum -a 256
+ */
+const EDIT_PASSWORD_HASH = "c0e51ac5d9982907452cc739f6c2b16329d7ae683b919416167e8f594efcce74";
+
+/** Compute SHA-256 hash of a string (Web Crypto API). */
+async function sha256(message: string): Promise<string> {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function LoginDialog({ isOpen, onClose, onLogin }: LoginDialogProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isChecking, setIsChecking] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsChecking(true);
 
-    if (password === "Aiypwzqp@640204") {
-      onLogin("", password);
-      setPassword("");
-    } else {
-      setError("Incorrect password");
+    try {
+      const hash = await sha256(password);
+      if (hash === EDIT_PASSWORD_HASH) {
+        onLogin("", password);
+        setPassword("");
+      } else {
+        setError("Incorrect password");
+      }
+    } finally {
+      setIsChecking(false);
     }
   };
 
@@ -66,9 +88,10 @@ export function LoginDialog({ isOpen, onClose, onLogin }: LoginDialogProps) {
 
           <button
             type="submit"
-            className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+            disabled={isChecking}
+            className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
           >
-            Unlock Edit Mode
+            {isChecking ? "Checking…" : "Unlock Edit Mode"}
           </button>
         </form>
       </div>
