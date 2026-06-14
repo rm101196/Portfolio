@@ -1,43 +1,23 @@
 import { useState, useCallback } from "react";
 
 /**
- * Cloud storage hook that persists portfolio content to a JSON file
- * in the GitHub repo via the GitHub API.
+ * Supabase-based cloud storage for portfolio content.
  *
- * READ: Fetches from raw.githubusercontent.com (no auth needed, public repo).
- * WRITE: Uses GitHub API with a Personal Access Token to commit changes.
+ * All editable text, section order, typography settings, and styles are stored
+ * in a single JSONB row in the `portfolio_content` table. Media files (images,
+ * PDFs) remain in browser localStorage due to size constraints.
  *
- * All portfolio data is stored in a single `data/content.json` file.
+ * READ: Public (anon key, RLS policy allows SELECT).
+ * WRITE: Uses the same anon key (RLS policy allows INSERT/UPDATE).
  */
 
-const REPO_OWNER = "rm101196";
-const REPO_NAME = "Portfolio";
-const FILE_PATH = "data/content.json";
-const BRANCH = "main";
+const SUPABASE_URL = "https://bcuzqoouzieswfpgeklo.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjdXpxb291emllc3dmcGdla2xvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MTU3MjEsImV4cCI6MjA5Njk5MTcyMX0.mqw13CRiIpyRm3SSWMbbG2Ql3GGiGQR5m0sG85SpslE";
+const TABLE = "portfolio_content";
+const ROW_ID = "main";
 
-/** Public raw URL for reading content (no auth required) */
-const READ_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/${FILE_PATH}`;
-
-/** GitHub API endpoint for writing content */
-const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`;
-
-const TOKEN_KEY = "portfolio_github_token";
-
-/**
- * Convert a Uint8Array to base64 without stack overflow.
- * Uses chunked processing for large payloads (images/PDFs stored as data URLs).
- */
-function arrayBufferToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    for (let j = 0; j < chunk.length; j++) {
-      binary += String.fromCharCode(chunk[j]);
-    }
-  }
-  return btoa(binary);
-}
+/** Maximum value size to sync (skip large base64 blobs like images/PDFs) */
+const MAX_VALUE_SIZE = 100_000;
 
 export interface CloudStorageState {
   isSaving: boolean;
@@ -47,38 +27,50 @@ export interface CloudStorageState {
 }
 
 /**
- * Collect all portfolio-related data from localStorage into a single object.
- * Excludes large binary data (images/PDFs stored as data URLs) to stay under
- * GitHub's 1MB file size limit. Media attachments remain browser-local.
+ * Collect all portfolio-related data from localStorage.
+ * Skips binary blobs (profile photos, media attachments, resumes) that
+ * exceed the size threshold — those stay browser-local.
  */
-function gatherAllContent(): Record<string, string> {
+function gatherContent(): Record<string, string> {
   const data: Record<string, string> = {};
-  const MAX_VALUE_SIZE = 50_000; // ~50KB per key max (skip large base64 blobs)
-
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (!key || !key.startsWith("portfolio_")) continue;
-    if (key === TOKEN_KEY) continue;
+    // Skip internal keys
+    if (key === "portfolio_github_token" || key === "portfolio_last_cloud_save") continue;
 
     const value = localStorage.getItem(key) || "";
-
-    // Skip keys that hold large binary data (profile photos, media, resumes)
     if (value.length > MAX_VALUE_SIZE) continue;
-
     data[key] = value;
   }
   return data;
 }
 
 /**
- * Restore content from cloud JSON into localStorage.
+ * Restore cloud content into localStorage.
  */
 function restoreContent(data: Record<string, string>) {
   for (const [key, value] of Object.entries(data)) {
-    if (key.startsWith("portfolio_") && key !== TOKEN_KEY) {
+    if (key.startsWith("portfolio_")) {
       localStorage.setItem(key, value);
     }
   }
+}
+
+/**
+ * Make a Supabase REST API request.
+ */
+async function supabaseRequest(path: string, options: RequestInit = {}): Promise<Response> {
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+      ...((options.headers as Record<string, string>) || {}),
+    },
+  });
 }
 
 export function useCloudStorage() {
@@ -89,39 +81,23 @@ export function useCloudStorage() {
     error: null,
   });
 
-  const getToken = (): string | null => localStorage.getItem(TOKEN_KEY);
-  const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);
-  const hasToken = (): boolean => !!getToken();
-
   /**
-   * Load content from the public raw GitHub URL (no auth needed).
-   * Returns true if content was found and applied to localStorage.
+   * Load content from Supabase (public read).
+   * Returns true if content was found and applied.
    */
   const loadFromCloud = useCallback(async (): Promise<boolean> => {
     setState((s) => ({ ...s, isLoading: true, error: null }));
     try {
-      // Add cache-busting query to avoid stale CDN cache
-      const res = await fetch(`${READ_URL}?t=${Date.now()}`, { cache: "no-store" });
-      if (!res.ok) {
-        if (res.status === 404) {
-          // File doesn't exist yet — first-time use
-          setState((s) => ({ ...s, isLoading: false }));
-          return false;
-        }
-        throw new Error(`Failed to load cloud data: ${res.status}`);
-      }
-      const text = await res.text();
-      // Skip if file is empty or just "{}"
-      if (!text || text.trim() === "{}") {
+      const res = await supabaseRequest(`${TABLE}?id=eq.${ROW_ID}&select=data`);
+      if (!res.ok) throw new Error(`Load failed: ${res.status}`);
+
+      const rows = await res.json();
+      if (!rows.length || !rows[0].data || Object.keys(rows[0].data).length === 0) {
         setState((s) => ({ ...s, isLoading: false }));
         return false;
       }
-      const data = JSON.parse(text);
-      if (Object.keys(data).length === 0) {
-        setState((s) => ({ ...s, isLoading: false }));
-        return false;
-      }
-      restoreContent(data);
+
+      restoreContent(rows[0].data);
       setState((s) => ({ ...s, isLoading: false }));
       return true;
     } catch (err: any) {
@@ -131,63 +107,30 @@ export function useCloudStorage() {
   }, []);
 
   /**
-   * Save all portfolio content to GitHub via the Contents API.
-   * Handles both create (new file) and update (existing file with SHA).
+   * Save all portfolio content to Supabase (upsert).
+   * No token prompt needed — uses the anon key with RLS.
    */
   const saveToCloud = useCallback(async (): Promise<boolean> => {
-    const token = getToken();
-    if (!token) {
-      setState((s) => ({ ...s, error: "No GitHub token configured" }));
-      return false;
-    }
-
     setState((s) => ({ ...s, isSaving: true, error: null }));
-
     try {
-      const content = gatherAllContent();
-      const jsonStr = JSON.stringify(content, null, 2);
-      // Convert to base64 safely (handles large payloads without stack overflow)
-      const base64Content = arrayBufferToBase64(new TextEncoder().encode(jsonStr));
+      const content = gatherContent();
 
-      // Fetch current file SHA (required for updates, skip for new files)
-      let sha: string | undefined;
-      const getRes = await fetch(`${API_URL}?ref=${BRANCH}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github.v3+json",
-        },
+      // Upsert: update existing row or insert if missing
+      const res = await supabaseRequest(`${TABLE}?id=eq.${ROW_ID}`, {
+        method: "PATCH",
+        body: JSON.stringify({ data: content, updated_at: new Date().toISOString() }),
       });
 
-      if (getRes.ok) {
-        const fileInfo = await getRes.json();
-        sha = fileInfo.sha;
-      } else if (getRes.status !== 404) {
-        // 404 means file doesn't exist yet (will create), any other error is a problem
-        const errBody = await getRes.text();
-        throw new Error(`Failed to check file status: ${getRes.status} — ${errBody}`);
-      }
-
-      // PUT the file content (creates or updates)
-      const putBody: Record<string, string> = {
-        message: `Update portfolio content — ${new Date().toISOString()}`,
-        content: base64Content,
-        branch: BRANCH,
-      };
-      if (sha) putBody.sha = sha;
-
-      const putRes = await fetch(API_URL, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github.v3+json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(putBody),
-      });
-
-      if (!putRes.ok) {
-        const errData = await putRes.json().catch(() => ({ message: "Unknown error" }));
-        throw new Error(errData.message || `GitHub API error: ${putRes.status}`);
+      if (!res.ok) {
+        // Try INSERT if PATCH fails (row doesn't exist)
+        const insertRes = await supabaseRequest(TABLE, {
+          method: "POST",
+          body: JSON.stringify({ id: ROW_ID, data: content, updated_at: new Date().toISOString() }),
+        });
+        if (!insertRes.ok) {
+          const errText = await insertRes.text();
+          throw new Error(`Save failed: ${insertRes.status} — ${errText}`);
+        }
       }
 
       const timestamp = new Date().toLocaleString();
@@ -202,9 +145,6 @@ export function useCloudStorage() {
 
   return {
     ...state,
-    hasToken,
-    setToken,
-    getToken,
     loadFromCloud,
     saveToCloud,
   };

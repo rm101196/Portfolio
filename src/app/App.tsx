@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Reorder, useDragControls } from "motion/react";
-import { GripVertical, Trash2, LayoutTemplate, Type, Paperclip, Cloud, CloudOff } from "lucide-react";
+import { GripVertical, Trash2, LayoutTemplate, Type, Paperclip, Cloud } from "lucide-react";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { Header } from "./components/Header";
 import { Hero } from "./components/Hero";
@@ -151,8 +151,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [sectionPanelOpen, setSectionPanelOpen] = useState(false);
   const [typoPanelOpen, setTypoPanelOpen] = useState(false);
-  const [showTokenPrompt, setShowTokenPrompt] = useState(false);
-  const [tokenInput, setTokenInput] = useState("");
   const [cloudMsg, setCloudMsg] = useState("");
 
   const { sections, save: saveSections, addSection, removeSection } = useSectionOrder();
@@ -193,25 +191,8 @@ export default function App() {
     localStorage.removeItem("portfolio_authenticated");
   };
 
-  /** Handle "Save to Cloud" click */
+  /** Handle "Save to Cloud" click — no token needed with Supabase */
   const handleCloudSave = async () => {
-    if (!cloud.hasToken()) {
-      setShowTokenPrompt(true);
-      return;
-    }
-    const ok = await cloud.saveToCloud();
-    if (ok) {
-      setCloudMsg("✓ Saved to cloud!");
-      setTimeout(() => setCloudMsg(""), 3000);
-    }
-  };
-
-  /** Submit token and then save */
-  const handleTokenSubmit = async () => {
-    if (!tokenInput.trim()) return;
-    cloud.setToken(tokenInput.trim());
-    setShowTokenPrompt(false);
-    setTokenInput("");
     const ok = await cloud.saveToCloud();
     if (ok) {
       setCloudMsg("✓ Saved to cloud!");
@@ -300,42 +281,7 @@ export default function App() {
           </div>
         )}
 
-        {/* GitHub token prompt modal */}
-        {showTokenPrompt && (
-          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 w-full max-w-md shadow-2xl">
-              <h3 className="text-lg font-bold mb-2">GitHub Token Required</h3>
-              <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">
-                To save edits to the cloud, enter a GitHub Personal Access Token with <code className="bg-neutral-100 dark:bg-neutral-800 px-1 rounded">repo</code> scope.
-                This is stored locally in your browser and never shared.
-              </p>
-              <input
-                type="password"
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-green-500 mb-4 font-mono text-sm"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleTokenSubmit}
-                  className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors text-sm"
-                >
-                  Save Token & Publish
-                </button>
-                <button
-                  onClick={() => { setShowTokenPrompt(false); setTokenInput(""); }}
-                  className="px-4 py-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg text-sm transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-              <p className="text-xs text-neutral-400 mt-3">
-                Create a token at: github.com → Settings → Developer Settings → Personal Access Tokens → Fine-grained tokens
-              </p>
-            </div>
-          </div>
-        )}
+        {/* Cloud status messages */}
 
         <AddSectionPanel
           isOpen={sectionPanelOpen}
