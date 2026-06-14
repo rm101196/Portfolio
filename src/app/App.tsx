@@ -166,14 +166,14 @@ export default function App() {
 
   /** Load cloud content on first page load (non-blocking) */
   useEffect(() => {
-    // Only load from cloud once per session to avoid reload loops
+    // Only load from cloud once per page session
     const alreadyLoaded = sessionStorage.getItem("portfolio_cloud_loaded");
     if (alreadyLoaded) return;
+    sessionStorage.setItem("portfolio_cloud_loaded", "1");
 
     cloud.loadFromCloud().then((loaded) => {
-      sessionStorage.setItem("portfolio_cloud_loaded", "1");
       if (loaded) {
-        // Reload the page to reflect the loaded data in all hooks
+        // Data was fetched and applied to localStorage — reload so React hooks pick it up
         window.location.reload();
       }
     });

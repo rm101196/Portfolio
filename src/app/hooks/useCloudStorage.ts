@@ -16,9 +16,6 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const TABLE = "portfolio_content";
 const ROW_ID = "main";
 
-/** Maximum value size to sync (skip large base64 blobs like images/PDFs) */
-const MAX_VALUE_SIZE = 100_000;
-
 export interface CloudStorageState {
   isSaving: boolean;
   isLoading: boolean;
@@ -33,14 +30,24 @@ export interface CloudStorageState {
  */
 function gatherContent(): Record<string, string> {
   const data: Record<string, string> = {};
+
+  // Keys that hold binary data or internals — always skip
+  const SKIP_KEYS = new Set([
+    "portfolio_profile_photo",
+    "portfolio_resume",
+    "portfolio_github_token",
+    "portfolio_last_cloud_save",
+    "portfolio_authenticated",
+  ]);
+
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (!key || !key.startsWith("portfolio_")) continue;
-    // Skip internal keys
-    if (key === "portfolio_github_token" || key === "portfolio_last_cloud_save") continue;
+    if (SKIP_KEYS.has(key)) continue;
+    // Skip media attachment keys (contain large base64 data URLs)
+    if (key.startsWith("portfolio_media_")) continue;
 
     const value = localStorage.getItem(key) || "";
-    if (value.length > MAX_VALUE_SIZE) continue;
     data[key] = value;
   }
   return data;
