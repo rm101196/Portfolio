@@ -1,26 +1,24 @@
-import { useState, useEffect, useRef } from "react";
-import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, ChevronDown, Palette } from "lucide-react";
+import { useState, useEffect, useRef, useId } from "react";
+import { Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, AlignRight, ChevronDown, Palette } from "lucide-react";
 
 // ── Per-field style overrides stored in localStorage ──────────────────────────
 
 interface FieldStyle {
   bold?: boolean;
   italic?: boolean;
+  underline?: boolean;
   align?: "left" | "center" | "right";
-  color?: string;    // hex or ""
-  fontSize?: string; // pixel value key, e.g. "12", "14", "16", "18", "20", "24", "30"
+  color?: string;    // hex color or ""
+  fontSize?: string; // pt value as string, e.g. "12", "18", "24"
 }
 
-/** Font size options using pixel values (applied via inline style, not Tailwind class) */
+/**
+ * Font size options in points (pt) — matching Microsoft Word's standard sizes.
+ * 1pt = 1.333px, so these render at familiar Word-like proportions.
+ */
 const FONT_SIZE_OPTIONS = [
-  { label: "XS", value: "12" },
-  { label: "SM", value: "14" },
-  { label: "Base", value: "16" },
-  { label: "LG", value: "18" },
-  { label: "XL", value: "20" },
-  { label: "2XL", value: "24" },
-  { label: "3XL", value: "30" },
-  { label: "4XL", value: "36" },
+  "8", "9", "10", "11", "12", "14", "16", "18",
+  "20", "22", "24", "26", "28", "36", "48", "72",
 ];
 
 function useFieldStyle(field: string): [FieldStyle, (patch: Partial<FieldStyle>) => void] {
@@ -56,15 +54,15 @@ function InlineStyleToolbar({
   const colorRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="flex items-center gap-0.5 flex-wrap mb-1.5">
+    <div className="flex items-center gap-0.5 flex-wrap mb-1.5 py-1">
       {/* Bold */}
       <button
         onClick={() => onUpdate({ bold: !style.bold })}
+        type="button"
         className={`p-1.5 rounded transition-colors ${
           style.bold ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
         }`}
         title="Bold"
-        type="button"
       >
         <Bold className="w-3.5 h-3.5" />
       </button>
@@ -72,13 +70,25 @@ function InlineStyleToolbar({
       {/* Italic */}
       <button
         onClick={() => onUpdate({ italic: !style.italic })}
+        type="button"
         className={`p-1.5 rounded transition-colors ${
           style.italic ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
         }`}
         title="Italic"
-        type="button"
       >
         <Italic className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Underline */}
+      <button
+        onClick={() => onUpdate({ underline: !style.underline })}
+        type="button"
+        className={`p-1.5 rounded transition-colors ${
+          style.underline ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+        }`}
+        title="Underline"
+      >
+        <UnderlineIcon className="w-3.5 h-3.5" />
       </button>
 
       {/* Divider */}
@@ -91,11 +101,11 @@ function InlineStyleToolbar({
           <button
             key={align}
             onClick={() => onUpdate({ align })}
+            type="button"
             className={`p-1.5 rounded transition-colors ${
               style.align === align ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
             }`}
             title={`Align ${align}`}
-            type="button"
           >
             <Icon className="w-3.5 h-3.5" />
           </button>
@@ -108,9 +118,9 @@ function InlineStyleToolbar({
       {/* Color picker */}
       <button
         onClick={() => colorRef.current?.click()}
+        type="button"
         className="relative p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
         title="Text color"
-        type="button"
       >
         <Palette className="w-3.5 h-3.5" />
         {style.color && (
@@ -127,9 +137,9 @@ function InlineStyleToolbar({
       {style.color && (
         <button
           onClick={() => onUpdate({ color: "" })}
+          type="button"
           className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 px-1"
           title="Reset color"
-          type="button"
         >
           ×
         </button>
@@ -138,31 +148,31 @@ function InlineStyleToolbar({
       {/* Divider */}
       <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-600 mx-1" />
 
-      {/* Font size dropdown */}
+      {/* Font size dropdown — pt values like Word */}
       <div className="relative">
         <button
           onClick={() => setShowSizeMenu(!showSizeMenu)}
-          className="flex items-center gap-0.5 px-2 py-1 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors text-xs font-medium"
-          title="Font size"
           type="button"
+          className="flex items-center gap-1 px-2 py-1 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors text-xs font-medium min-w-[52px] justify-between"
+          title="Font size (pt)"
         >
-          {FONT_SIZE_OPTIONS.find((o) => o.value === style.fontSize)?.label || "Size"}
+          <span>{style.fontSize ? `${style.fontSize}pt` : "Size"}</span>
           <ChevronDown className="w-3 h-3" />
         </button>
         {showSizeMenu && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setShowSizeMenu(false)} />
-            <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg overflow-hidden min-w-[80px]">
-              {FONT_SIZE_OPTIONS.map((opt) => (
+            <div className="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[72px] max-h-60 overflow-y-auto">
+              {FONT_SIZE_OPTIONS.map((pt) => (
                 <button
-                  key={opt.value}
-                  onClick={() => { onUpdate({ fontSize: opt.value }); setShowSizeMenu(false); }}
+                  key={pt}
+                  onClick={() => { onUpdate({ fontSize: pt }); setShowSizeMenu(false); }}
                   type="button"
                   className={`w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors ${
-                    style.fontSize === opt.value ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-semibold" : ""
+                    style.fontSize === pt ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-semibold" : ""
                   }`}
                 >
-                  {opt.label}
+                  {pt} pt
                 </button>
               ))}
               {style.fontSize && (
@@ -203,6 +213,7 @@ export function EditableContent({
 }: EditableContentProps) {
   const [value, setValue] = useState(defaultValue);
   const [fieldStyle, updateFieldStyle] = useFieldStyle(field);
+  const scopeId = useId().replace(/:/g, "_");
 
   useEffect(() => {
     const stored = localStorage.getItem(`portfolio_${field}`);
@@ -218,41 +229,37 @@ export function EditableContent({
   }, [value, field, defaultValue]);
 
   /**
-   * Build inline style from per-field overrides.
-   * Uses inline CSS (not Tailwind classes) so styles work at runtime
-   * without needing build-time class scanning.
+   * Generate a <style> block with !important overrides.
+   * This is the only reliable way to override Tailwind's CSS-layer-based
+   * color/size classes from a runtime value stored in localStorage.
    */
-  const buildInlineStyle = (): React.CSSProperties => {
-    const s: React.CSSProperties = {};
-    if (fieldStyle.bold) s.fontWeight = "bold";
-    if (fieldStyle.italic) s.fontStyle = "italic";
-    if (fieldStyle.align) s.textAlign = fieldStyle.align;
-    if (fieldStyle.color) s.color = fieldStyle.color;
-    if (fieldStyle.fontSize) s.fontSize = `${fieldStyle.fontSize}px`;
-    return s;
-  };
+  const hasOverrides = fieldStyle.bold || fieldStyle.italic || fieldStyle.underline ||
+    fieldStyle.align || fieldStyle.color || fieldStyle.fontSize;
 
-  const inlineStyle = buildInlineStyle();
+  const cssRules = hasOverrides ? buildCssRules(scopeId, fieldStyle) : "";
 
   if (!isEditing) {
     const Tag = as;
     return (
-      <Tag className={className} style={inlineStyle}>
-        {value}
-      </Tag>
+      <>
+        {cssRules && <style dangerouslySetInnerHTML={{ __html: cssRules }} />}
+        <Tag className={`${className} editable-${scopeId}`}>
+          {value}
+        </Tag>
+      </>
     );
   }
 
-  // Edit mode: show inline toolbar + input/textarea
+  // Edit mode: toolbar + input
   return (
     <div className="w-full">
+      {cssRules && <style dangerouslySetInnerHTML={{ __html: cssRules }} />}
       <InlineStyleToolbar style={fieldStyle} onUpdate={updateFieldStyle} />
       {multiline ? (
         <textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          style={inlineStyle}
-          className={`${className} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800 resize-none`}
+          className={`${className} editable-${scopeId} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800 resize-none`}
           rows={3}
         />
       ) : (
@@ -260,10 +267,28 @@ export function EditableContent({
           type="text"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          style={inlineStyle}
-          className={`${className} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800`}
+          className={`${className} editable-${scopeId} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800`}
         />
       )}
     </div>
   );
+}
+
+/**
+ * Build scoped CSS rules with !important to guarantee overrides
+ * over Tailwind utility classes (which use CSS layers).
+ */
+function buildCssRules(scopeId: string, style: FieldStyle): string {
+  const selector = `.editable-${scopeId}`;
+  const rules: string[] = [];
+
+  if (style.bold) rules.push("font-weight: bold !important");
+  if (style.italic) rules.push("font-style: italic !important");
+  if (style.underline) rules.push("text-decoration: underline !important");
+  if (style.align) rules.push(`text-align: ${style.align} !important`);
+  if (style.color) rules.push(`color: ${style.color} !important`);
+  if (style.fontSize) rules.push(`font-size: ${style.fontSize}pt !important`);
+
+  if (rules.length === 0) return "";
+  return `${selector} { ${rules.join("; ")} }`;
 }
