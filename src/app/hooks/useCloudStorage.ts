@@ -16,7 +16,7 @@ const FILE_PATH = "data/content.json";
 const BRANCH = "main";
 
 /** GitHub Pages URL for reading (no auth required) */
-const READ_URL = `https://${REPO_OWNER}.github.io/${REPO_NAME}/${FILE_PATH}`;
+const READ_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/${FILE_PATH}`;
 
 /** GitHub API URL for writing */
 const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`;
