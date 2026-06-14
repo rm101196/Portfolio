@@ -162,16 +162,37 @@ export default function App() {
     if (authStatus === "true") setIsAuthenticated(true);
   }, []);
 
-  // Show loading screen while Supabase data loads
+  // Hydrate localStorage from Supabase data, then reload once to re-initialize hooks
   useEffect(() => {
-    if (!portfolioData.isLoading) {
-      // Hydrate localStorage from Supabase store so existing hooks pick up the data
+    if (!portfolioData.isLoading && Object.keys(portfolioData.store).length > 0) {
+      // Check if we've already hydrated this session
+      const hydrated = sessionStorage.getItem("portfolio_hydrated");
+      if (hydrated) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Clear ALL stale portfolio data from localStorage
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("portfolio_") && key !== "portfolio_authenticated") {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+      // Hydrate localStorage with fresh Supabase data
       for (const [key, value] of Object.entries(portfolioData.store)) {
         localStorage.setItem(key, value);
       }
-      // Small delay for the loading animation then hide
-      const timer = setTimeout(() => setIsLoading(false), 800);
-      return () => clearTimeout(timer);
+
+      // Mark as hydrated and reload so hooks re-initialize with fresh data
+      sessionStorage.setItem("portfolio_hydrated", "1");
+      window.location.reload();
+    } else if (!portfolioData.isLoading) {
+      // No cloud data — show page with defaults
+      setIsLoading(false);
     }
   }, [portfolioData.isLoading, portfolioData.store]);
 
