@@ -1,1 +1,5 @@
-{}
+{
+  "portfolio_authenticated": "true",
+  "portfolio_style_hero_greeting": "{\"fontSize\":\"48\"}",
+  "portfolio_list_stat_items": "[{\"id\":\"stat_impact\",\"value\":\"$10M+\",\"label\":\"Business Impact\",\"color\":\"blue\"},{\"id\":\"stat_teams\",\"value\":\"20+\",\"label\":\"Cross-functional Teams Led\",\"color\":\"purple\"},{\"id\":\"stat_markets\",\"value\":\"4\",\"label\":\"Global Markets (US, EU, APAC)\",\"color\":\"pink\"},{\"id\":\"stat_experience\",\"value\":\"7+\",\"label\":\"Years Experience\",\"color\":\"green\"}]"
+}
