@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Reorder, useDragControls } from "motion/react";
-import { GripVertical, Trash2, LayoutTemplate, Type, Paperclip, Cloud } from "lucide-react";
+import { GripVertical, Trash2, LayoutTemplate, Type, Paperclip, Save } from "lucide-react";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { Header } from "./components/Header";
 import { Hero } from "./components/Hero";
@@ -20,7 +20,7 @@ import { MediaPreviewModal } from "./components/MediaPreviewModal";
 import { useSectionOrder, type SectionDef } from "./hooks/useSectionOrder";
 import { useTypographySettings, DEFAULTS as TYPO_DEFAULTS } from "./hooks/useTypographySettings";
 import { useSectionMedia, type MediaItem } from "./hooks/useSectionMedia";
-import { useCloudStorage } from "./hooks/useCloudStorage";
+import { usePortfolioDataRoot, PortfolioDataProvider } from "./hooks/usePortfolioData";
 
 // ── section renderer ──────────────────────────────────────────────────────────
 function renderSection(section: SectionDef, isEditing: boolean) {
@@ -151,34 +151,29 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [sectionPanelOpen, setSectionPanelOpen] = useState(false);
   const [typoPanelOpen, setTypoPanelOpen] = useState(false);
-  const [cloudMsg, setCloudMsg] = useState("");
+  const [saveMsg, setSaveMsg] = useState("");
 
+  const portfolioData = usePortfolioDataRoot();
   const { sections, save: saveSections, addSection, removeSection } = useSectionOrder();
   const { settings: typo, update: updateTypo, save: saveTypo } = useTypographySettings();
-  const cloud = useCloudStorage();
 
   useEffect(() => {
     const authStatus = localStorage.getItem("portfolio_authenticated");
     if (authStatus === "true") setIsAuthenticated(true);
-    const timer = setTimeout(() => setIsLoading(false), 1500);
-    return () => clearTimeout(timer);
   }, []);
 
-  /** Load cloud content on first page load (non-blocking) */
+  // Show loading screen while Supabase data loads
   useEffect(() => {
-    // Only load from cloud once per page session
-    const alreadyLoaded = sessionStorage.getItem("portfolio_cloud_loaded");
-    if (alreadyLoaded) return;
-    sessionStorage.setItem("portfolio_cloud_loaded", "1");
-
-    cloud.loadFromCloud().then((loaded) => {
-      if (loaded) {
-        // Data was fetched and applied to localStorage — reload so React hooks pick it up
-        window.location.reload();
+    if (!portfolioData.isLoading) {
+      // Hydrate localStorage from Supabase store so existing hooks pick up the data
+      for (const [key, value] of Object.entries(portfolioData.store)) {
+        localStorage.setItem(key, value);
       }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      // Small delay for the loading animation then hide
+      const timer = setTimeout(() => setIsLoading(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [portfolioData.isLoading, portfolioData.store]);
 
   const handleLogin = (_email: string, _password: string) => {
     setIsAuthenticated(true);
@@ -191,16 +186,27 @@ export default function App() {
     localStorage.removeItem("portfolio_authenticated");
   };
 
-  /** Handle "Save to Cloud" click — no token needed with Supabase */
-  const handleCloudSave = async () => {
-    const ok = await cloud.saveToCloud();
+  /** Unified save: gather localStorage data and push to Supabase */
+  const handleSave = async () => {
+    // Sync current localStorage into the Supabase store
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith("portfolio_")) continue;
+      // Skip binary/auth keys
+      if (key === "portfolio_authenticated" || key === "portfolio_profile_photo" ||
+          key === "portfolio_resume" || key.startsWith("portfolio_media_") ||
+          key === "portfolio_github_token" || key === "portfolio_last_cloud_save") continue;
+      portfolioData.set(key, localStorage.getItem(key) || "");
+    }
+    const ok = await portfolioData.save();
     if (ok) {
-      setCloudMsg("✓ Saved to cloud!");
-      setTimeout(() => setCloudMsg(""), 3000);
+      setSaveMsg("✓ Saved!");
+      setTimeout(() => setSaveMsg(""), 3000);
     }
   };
 
   return (
+    <PortfolioDataProvider value={portfolioData}>
     <ThemeProvider>
       {isLoading && <LoadingScreen />}
       <GlobalStyleProvider settings={typo} />
@@ -209,7 +215,13 @@ export default function App() {
         <Header
           isEditing={isEditing}
           isAuthenticated={isAuthenticated}
-          onToggleEdit={() => setIsEditing((v) => !v)}
+          onToggleEdit={() => {
+            if (isEditing) {
+              // Exiting edit mode — auto-save to Supabase
+              handleSave();
+            }
+            setIsEditing((v) => !v);
+          }}
           onLogin={handleLogin}
           onLogout={handleLogout}
         />
@@ -261,27 +273,25 @@ export default function App() {
               Text & Style
             </button>
             <button
-              onClick={handleCloudSave}
-              disabled={cloud.isSaving}
+              onClick={handleSave}
+              disabled={portfolioData.isSaving}
               className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-full shadow-xl transition-colors text-sm"
             >
-              <Cloud className="w-4 h-4" />
-              {cloud.isSaving ? "Saving…" : "Save to Cloud"}
+              <Save className="w-4 h-4" />
+              {portfolioData.isSaving ? "Saving…" : "Save"}
             </button>
-            {cloudMsg && (
+            {saveMsg && (
               <div className="px-3 py-2 bg-green-700 text-white text-xs rounded-full shadow-xl">
-                {cloudMsg}
+                {saveMsg}
               </div>
             )}
-            {cloud.error && (
+            {portfolioData.error && (
               <div className="px-3 py-2 bg-red-600 text-white text-xs rounded-full shadow-xl max-w-[200px] truncate">
-                {cloud.error}
+                {portfolioData.error}
               </div>
             )}
           </div>
         )}
-
-        {/* Cloud status messages */}
 
         <AddSectionPanel
           isOpen={sectionPanelOpen}
@@ -302,5 +312,6 @@ export default function App() {
         <ScrollToTop />
       </div>
     </ThemeProvider>
+    </PortfolioDataProvider>
   );
 }
