@@ -4,10 +4,10 @@ import { useState, useCallback } from "react";
  * Cloud storage hook that persists portfolio content to a JSON file
  * in the GitHub repo via the GitHub API.
  *
- * READ: Fetches from the deployed GitHub Pages URL (no auth needed).
+ * READ: Fetches from raw.githubusercontent.com (no auth needed, public repo).
  * WRITE: Uses GitHub API with a Personal Access Token to commit changes.
  *
- * Storage format: A single JSON object with all portfolio data keys.
+ * All portfolio data is stored in a single `data/content.json` file.
  */
 
 const REPO_OWNER = "rm101196";
@@ -15,10 +15,10 @@ const REPO_NAME = "Portfolio";
 const FILE_PATH = "data/content.json";
 const BRANCH = "main";
 
-/** GitHub Pages URL for reading (no auth required) */
+/** Public raw URL for reading content (no auth required) */
 const READ_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/${FILE_PATH}`;
 
-/** GitHub API URL for writing */
+/** GitHub API endpoint for writing content */
 const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`;
 
 const TOKEN_KEY = "portfolio_github_token";
@@ -31,13 +31,13 @@ export interface CloudStorageState {
 }
 
 /**
- * Collect all portfolio-related localStorage keys into a single object.
+ * Collect all portfolio-related data from localStorage into a single object.
  */
 function gatherAllContent(): Record<string, string> {
   const data: Record<string, string> = {};
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key && key.startsWith("portfolio_")) {
+    if (key && key.startsWith("portfolio_") && key !== TOKEN_KEY) {
       data[key] = localStorage.getItem(key) || "";
     }
   }
@@ -49,7 +49,7 @@ function gatherAllContent(): Record<string, string> {
  */
 function restoreContent(data: Record<string, string>) {
   for (const [key, value] of Object.entries(data)) {
-    if (key.startsWith("portfolio_")) {
+    if (key.startsWith("portfolio_") && key !== TOKEN_KEY) {
       localStorage.setItem(key, value);
     }
   }
@@ -63,32 +63,38 @@ export function useCloudStorage() {
     error: null,
   });
 
-  /** Get stored GitHub token */
   const getToken = (): string | null => localStorage.getItem(TOKEN_KEY);
-
-  /** Save token */
   const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);
-
-  /** Check if token is configured */
   const hasToken = (): boolean => !!getToken();
 
   /**
-   * Load content from GitHub Pages (public, no auth needed).
-   * Returns true if content was loaded and applied.
+   * Load content from the public raw GitHub URL (no auth needed).
+   * Returns true if content was found and applied to localStorage.
    */
   const loadFromCloud = useCallback(async (): Promise<boolean> => {
     setState((s) => ({ ...s, isLoading: true, error: null }));
     try {
-      const res = await fetch(READ_URL, { cache: "no-store" });
+      // Add cache-busting query to avoid stale CDN cache
+      const res = await fetch(`${READ_URL}?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) {
-        // File doesn't exist yet — that's fine, first-time use
         if (res.status === 404) {
+          // File doesn't exist yet — first-time use
           setState((s) => ({ ...s, isLoading: false }));
           return false;
         }
-        throw new Error(`Failed to load: ${res.status}`);
+        throw new Error(`Failed to load cloud data: ${res.status}`);
       }
-      const data = await res.json();
+      const text = await res.text();
+      // Skip if file is empty or just "{}"
+      if (!text || text.trim() === "{}") {
+        setState((s) => ({ ...s, isLoading: false }));
+        return false;
+      }
+      const data = JSON.parse(text);
+      if (Object.keys(data).length === 0) {
+        setState((s) => ({ ...s, isLoading: false }));
+        return false;
+      }
       restoreContent(data);
       setState((s) => ({ ...s, isLoading: false }));
       return true;
@@ -99,8 +105,8 @@ export function useCloudStorage() {
   }, []);
 
   /**
-   * Save all portfolio content to GitHub repo via API.
-   * Requires a valid Personal Access Token.
+   * Save all portfolio content to GitHub via the Contents API.
+   * Handles both create (new file) and update (existing file with SHA).
    */
   const saveToCloud = useCallback(async (): Promise<boolean> => {
     const token = getToken();
@@ -114,32 +120,35 @@ export function useCloudStorage() {
     try {
       const content = gatherAllContent();
       const jsonStr = JSON.stringify(content, null, 2);
-      const base64Content = btoa(unescape(encodeURIComponent(jsonStr)));
+      // Use TextEncoder for proper UTF-8 → base64 encoding
+      const bytes = new TextEncoder().encode(jsonStr);
+      const base64Content = btoa(String.fromCharCode(...bytes));
 
-      // Get current file SHA (needed for updates)
+      // Fetch current file SHA (required for updates, skip for new files)
       let sha: string | undefined;
-      try {
-        const getRes = await fetch(API_URL, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github.v3+json",
-          },
-        });
-        if (getRes.ok) {
-          const fileData = await getRes.json();
-          sha = fileData.sha;
-        }
-      } catch {
-        // File doesn't exist yet — will create
+      const getRes = await fetch(`${API_URL}?ref=${BRANCH}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      });
+
+      if (getRes.ok) {
+        const fileInfo = await getRes.json();
+        sha = fileInfo.sha;
+      } else if (getRes.status !== 404) {
+        // 404 means file doesn't exist yet (will create), any other error is a problem
+        const errBody = await getRes.text();
+        throw new Error(`Failed to check file status: ${getRes.status} — ${errBody}`);
       }
 
-      // Commit the file
-      const body: Record<string, string> = {
+      // PUT the file content (creates or updates)
+      const putBody: Record<string, string> = {
         message: `Update portfolio content — ${new Date().toISOString()}`,
         content: base64Content,
         branch: BRANCH,
       };
-      if (sha) body.sha = sha;
+      if (sha) putBody.sha = sha;
 
       const putRes = await fetch(API_URL, {
         method: "PUT",
@@ -148,17 +157,17 @@ export function useCloudStorage() {
           Accept: "application/vnd.github.v3+json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(putBody),
       });
 
       if (!putRes.ok) {
-        const errData = await putRes.json().catch(() => ({}));
+        const errData = await putRes.json().catch(() => ({ message: "Unknown error" }));
         throw new Error(errData.message || `GitHub API error: ${putRes.status}`);
       }
 
       const timestamp = new Date().toLocaleString();
       localStorage.setItem("portfolio_last_cloud_save", timestamp);
-      setState((s) => ({ ...s, isSaving: false, lastSaved: timestamp }));
+      setState({ isSaving: false, isLoading: false, lastSaved: timestamp, error: null });
       return true;
     } catch (err: any) {
       setState((s) => ({ ...s, isSaving: false, error: err.message }));
