@@ -188,7 +188,7 @@ export default function App() {
 
         {/* Sections — drag-reorderable in edit mode */}
         {isEditing ? (
-          <Reorder.Group axis="y" values={sections} onReorder={saveSections} as="main" className="pt-16">
+          <Reorder.Group axis="y" values={sections} onReorder={saveSections} as="main" className="pt-16 pb-24">
             {sections.map((section) => (
               <SectionWrapper
                 key={section.id}

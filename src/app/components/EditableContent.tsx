@@ -8,17 +8,19 @@ interface FieldStyle {
   italic?: boolean;
   align?: "left" | "center" | "right";
   color?: string;    // hex or ""
-  fontSize?: string; // e.g. "text-sm", "text-base", "text-lg", "text-xl"
+  fontSize?: string; // pixel value key, e.g. "12", "14", "16", "18", "20", "24", "30"
 }
 
+/** Font size options using pixel values (applied via inline style, not Tailwind class) */
 const FONT_SIZE_OPTIONS = [
-  { label: "XS", value: "text-xs" },
-  { label: "SM", value: "text-sm" },
-  { label: "Base", value: "text-base" },
-  { label: "LG", value: "text-lg" },
-  { label: "XL", value: "text-xl" },
-  { label: "2XL", value: "text-2xl" },
-  { label: "3XL", value: "text-3xl" },
+  { label: "XS", value: "12" },
+  { label: "SM", value: "14" },
+  { label: "Base", value: "16" },
+  { label: "LG", value: "18" },
+  { label: "XL", value: "20" },
+  { label: "2XL", value: "24" },
+  { label: "3XL", value: "30" },
+  { label: "4XL", value: "36" },
 ];
 
 function useFieldStyle(field: string): [FieldStyle, (patch: Partial<FieldStyle>) => void] {
@@ -54,7 +56,7 @@ function InlineStyleToolbar({
   const colorRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="flex items-center gap-0.5 flex-wrap mb-1">
+    <div className="flex items-center gap-0.5 flex-wrap mb-1.5">
       {/* Bold */}
       <button
         onClick={() => onUpdate({ bold: !style.bold })}
@@ -62,6 +64,7 @@ function InlineStyleToolbar({
           style.bold ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
         }`}
         title="Bold"
+        type="button"
       >
         <Bold className="w-3.5 h-3.5" />
       </button>
@@ -73,6 +76,7 @@ function InlineStyleToolbar({
           style.italic ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
         }`}
         title="Italic"
+        type="button"
       >
         <Italic className="w-3.5 h-3.5" />
       </button>
@@ -91,6 +95,7 @@ function InlineStyleToolbar({
               style.align === align ? "bg-blue-600 text-white" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
             }`}
             title={`Align ${align}`}
+            type="button"
           >
             <Icon className="w-3.5 h-3.5" />
           </button>
@@ -105,6 +110,7 @@ function InlineStyleToolbar({
         onClick={() => colorRef.current?.click()}
         className="relative p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
         title="Text color"
+        type="button"
       >
         <Palette className="w-3.5 h-3.5" />
         {style.color && (
@@ -123,6 +129,7 @@ function InlineStyleToolbar({
           onClick={() => onUpdate({ color: "" })}
           className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 px-1"
           title="Reset color"
+          type="button"
         >
           ×
         </button>
@@ -137,6 +144,7 @@ function InlineStyleToolbar({
           onClick={() => setShowSizeMenu(!showSizeMenu)}
           className="flex items-center gap-0.5 px-2 py-1 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors text-xs font-medium"
           title="Font size"
+          type="button"
         >
           {FONT_SIZE_OPTIONS.find((o) => o.value === style.fontSize)?.label || "Size"}
           <ChevronDown className="w-3 h-3" />
@@ -149,6 +157,7 @@ function InlineStyleToolbar({
                 <button
                   key={opt.value}
                   onClick={() => { onUpdate({ fontSize: opt.value }); setShowSizeMenu(false); }}
+                  type="button"
                   className={`w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors ${
                     style.fontSize === opt.value ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-semibold" : ""
                   }`}
@@ -159,6 +168,7 @@ function InlineStyleToolbar({
               {style.fontSize && (
                 <button
                   onClick={() => { onUpdate({ fontSize: "" }); setShowSizeMenu(false); }}
+                  type="button"
                   className="w-full text-left px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 border-t border-neutral-100 dark:border-neutral-700"
                 >
                   Reset
@@ -207,20 +217,27 @@ export function EditableContent({
     }
   }, [value, field, defaultValue]);
 
-  /** Build inline style object from per-field overrides */
-  const inlineStyle: React.CSSProperties = {};
-  if (fieldStyle.bold) inlineStyle.fontWeight = "bold";
-  if (fieldStyle.italic) inlineStyle.fontStyle = "italic";
-  if (fieldStyle.align) inlineStyle.textAlign = fieldStyle.align;
-  if (fieldStyle.color) inlineStyle.color = fieldStyle.color;
+  /**
+   * Build inline style from per-field overrides.
+   * Uses inline CSS (not Tailwind classes) so styles work at runtime
+   * without needing build-time class scanning.
+   */
+  const buildInlineStyle = (): React.CSSProperties => {
+    const s: React.CSSProperties = {};
+    if (fieldStyle.bold) s.fontWeight = "bold";
+    if (fieldStyle.italic) s.fontStyle = "italic";
+    if (fieldStyle.align) s.textAlign = fieldStyle.align;
+    if (fieldStyle.color) s.color = fieldStyle.color;
+    if (fieldStyle.fontSize) s.fontSize = `${fieldStyle.fontSize}px`;
+    return s;
+  };
 
-  /** Build dynamic class for font size override */
-  const sizeClass = fieldStyle.fontSize || "";
+  const inlineStyle = buildInlineStyle();
 
   if (!isEditing) {
     const Tag = as;
     return (
-      <Tag className={`${className} ${sizeClass}`} style={inlineStyle}>
+      <Tag className={className} style={inlineStyle}>
         {value}
       </Tag>
     );
@@ -235,7 +252,7 @@ export function EditableContent({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           style={inlineStyle}
-          className={`${className} ${sizeClass} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800 resize-none`}
+          className={`${className} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800 resize-none`}
           rows={3}
         />
       ) : (
@@ -244,7 +261,7 @@ export function EditableContent({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           style={inlineStyle}
-          className={`${className} ${sizeClass} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800`}
+          className={`${className} w-full p-2 border-2 border-blue-500 rounded bg-white dark:bg-neutral-800`}
         />
       )}
     </div>
