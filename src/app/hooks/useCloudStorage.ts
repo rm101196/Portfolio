@@ -23,6 +23,22 @@ const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/content
 
 const TOKEN_KEY = "portfolio_github_token";
 
+/**
+ * Convert a Uint8Array to base64 without stack overflow.
+ * Uses chunked processing for large payloads (images/PDFs stored as data URLs).
+ */
+function arrayBufferToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    for (let j = 0; j < chunk.length; j++) {
+      binary += String.fromCharCode(chunk[j]);
+    }
+  }
+  return btoa(binary);
+}
+
 export interface CloudStorageState {
   isSaving: boolean;
   isLoading: boolean;
@@ -32,14 +48,24 @@ export interface CloudStorageState {
 
 /**
  * Collect all portfolio-related data from localStorage into a single object.
+ * Excludes large binary data (images/PDFs stored as data URLs) to stay under
+ * GitHub's 1MB file size limit. Media attachments remain browser-local.
  */
 function gatherAllContent(): Record<string, string> {
   const data: Record<string, string> = {};
+  const MAX_VALUE_SIZE = 50_000; // ~50KB per key max (skip large base64 blobs)
+
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key && key.startsWith("portfolio_") && key !== TOKEN_KEY) {
-      data[key] = localStorage.getItem(key) || "";
-    }
+    if (!key || !key.startsWith("portfolio_")) continue;
+    if (key === TOKEN_KEY) continue;
+
+    const value = localStorage.getItem(key) || "";
+
+    // Skip keys that hold large binary data (profile photos, media, resumes)
+    if (value.length > MAX_VALUE_SIZE) continue;
+
+    data[key] = value;
   }
   return data;
 }
@@ -120,9 +146,8 @@ export function useCloudStorage() {
     try {
       const content = gatherAllContent();
       const jsonStr = JSON.stringify(content, null, 2);
-      // Use TextEncoder for proper UTF-8 → base64 encoding
-      const bytes = new TextEncoder().encode(jsonStr);
-      const base64Content = btoa(String.fromCharCode(...bytes));
+      // Convert to base64 safely (handles large payloads without stack overflow)
+      const base64Content = arrayBufferToBase64(new TextEncoder().encode(jsonStr));
 
       // Fetch current file SHA (required for updates, skip for new files)
       let sha: string | undefined;
